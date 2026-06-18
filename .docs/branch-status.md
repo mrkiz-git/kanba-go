@@ -66,9 +66,15 @@ Deliverables:
 
 ## part-04-frontend-base
 
-_Status: not started_
+_Status: complete_
 
 _No open issues._
+
+Deliverables:
+- [x] `internal/handler/static.go` — static file server with SPA fallback to `index.html`
+- [x] `internal/server/server.go` — serves Next.js export at `/`, API at `/api/*`
+- [x] `web/` — Tailwind v4, AppShell, route pages with empty states per `UI.md`
+- [x] `scripts/start.sh` — builds frontend before local server start
 
 ---
 

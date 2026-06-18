@@ -29,6 +29,9 @@ start_local() {
 
   mkdir -p "${ROOT}/data" "${LOG_DIR}" "${ROOT}/bin"
 
+  echo "Building frontend..."
+  (cd "${ROOT}/web" && npm ci && npm run build)
+
   echo "Building local server..."
   (cd "$ROOT" && go build -o "$BINARY" ./cmd/kanba)
 

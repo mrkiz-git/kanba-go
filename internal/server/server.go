@@ -25,6 +25,8 @@ func New(cfg config.Config, logger *logging.Logger) *http.Server {
 		r.Get("/health", handler.Health)
 	})
 
+	r.Handle("/*", handler.Static(cfg.StaticDir))
+
 	return &http.Server{
 		Addr:         cfg.Addr(),
 		Handler:      r,
