@@ -131,6 +131,21 @@ This plan adopts the original Kanban web app architecture but transitions the ba
 
 ---
 
+## Global Implementation Rules
+
+To prevent regressions of previously identified issues, all development must adhere to the following rules:
+
+**Go & API:**
+1. **Timeouts:** `http.Server` must explicitly set `ReadTimeout`, `WriteTimeout`, and `IdleTimeout`.
+2. **Graceful Shutdown:** Listen for `SIGTERM` and `SIGINT`. Ensure `http.ErrServerClosed` does not trigger a fatal error.
+3. **Response Writing:** Do not call `w.WriteHeader(http.StatusOK)` before a successful JSON encode. Handle encoding errors properly.
+4. **IP Spoofing:** Do not use blindly trusting IP middleware (like `middleware.RealIP`) without a trusted proxy verification.
+
+**Containerization:**
+5. **Port Configuration:** Do not hardcode container-internal ports in startup scripts. Rely on `Containerfile` ENV variables (e.g., `PORT`).
+6. **Build Caching:** Frontend `npm build` and backend `go build` must be independent stages in the `Containerfile` so backend-only changes do not rebuild the frontend.
+7. **Permissions:** Ensure the non-root container user (`nobody`) has write permissions to required directories (e.g., `/app/data` for SQLite).
+
 ## Verification Plan
 
 ### Automated Tests

@@ -51,3 +51,17 @@ Direct answer in the **first sentence**. No intros, no pleasantries. Extreme bre
 - **DON'T:** "Great question! Let me help you with that. So, regarding the night market you asked about..."
 
 ---
+
+## Technical Implementation Rules (Preventing Past Issues)
+
+**Go HTTP Servers:**
+- Never use `log.Fatal` on `ListenAndServe` without explicitly checking and ignoring `http.ErrServerClosed`.
+- Always configure `ReadTimeout`, `WriteTimeout`, and `IdleTimeout` on `http.Server`.
+- Always implement graceful shutdown by listening for OS signals (SIGTERM/SIGINT).
+- Never write `http.StatusOK` (200) before ensuring JSON encoding (or other operations) succeed.
+- Never trust `X-Forwarded-For` or use `middleware.RealIP` without a trusted reverse proxy check (prevents IP spoofing).
+
+**Docker / Podman:**
+- Decouple container configuration: Never hardcode container-internal ports in shell scripts; rely on the `ENV PORT` defined in the `Containerfile`.
+- Optimize multi-stage builds: Separate frontend (npm) and backend (Go) build stages completely so backend-only changes do not trigger frontend rebuilds.
+- Secure file permissions: When running as a non-root user (e.g., `nobody`), ensure the user has write access to necessary directories (e.g., SQLite data directory).
