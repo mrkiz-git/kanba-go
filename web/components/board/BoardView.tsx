@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DragDropContext,
   Draggable,
@@ -17,6 +17,7 @@ import {
   deleteBoard,
   getBoard,
   isReadOnly,
+  listBoards,
   patchBoard,
   type Board,
   type Card,
@@ -43,6 +44,9 @@ export function BoardView({ boardId }: BoardViewProps) {
   const [newCardTitle, setNewCardTitle] = useState("");
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState("");
+  const [showCardPicker, setShowCardPicker] = useState(false);
+  const addColumnRef = useRef<HTMLDivElement>(null);
+  const boardScrollRef = useRef<HTMLDivElement>(null);
 
   const permission = boards.find((item) => item.id === boardId)?.permission;
   const readOnly = isReadOnly(permission);
@@ -70,6 +74,45 @@ export function BoardView({ boardId }: BoardViewProps) {
     void loadBoard();
     void refreshBoards();
   }, [loadBoard, refreshBoards]);
+
+  useEffect(() => {
+    if (!showCardPicker) {
+      return;
+    }
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+      if (!target.closest("[data-card-picker]")) {
+        setShowCardPicker(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [showCardPicker]);
+
+  function startAddCard(columnId: string) {
+    setShowCardPicker(false);
+    setAddingCardColumnId(columnId);
+    setNewCardTitle("");
+  }
+
+  function startAddColumn() {
+    setAddingColumn(true);
+    setNewColumnTitle("");
+    requestAnimationFrame(() => {
+      addColumnRef.current?.scrollIntoView({ behavior: "smooth", inline: "end" });
+    });
+  }
+
+  async function handleBoardNotFound() {
+    const latest = await listBoards();
+    if (latest.boards.some((item) => item.id === boardId)) {
+      setLoading(true);
+      await loadBoard();
+      return;
+    }
+    await refreshBoards();
+    router.replace("/boards/");
+  }
 
   async function applyPatch(patch: JsonPatchOp[], optimistic: Board) {
     if (!board) {
@@ -227,9 +270,14 @@ export function BoardView({ boardId }: BoardViewProps) {
         title="Unable to load board"
         description={error}
         action={
-          <Button variant="secondary" onClick={() => router.push("/boards/")}>
-            Back to boards
-          </Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button variant="primary" onClick={() => void handleBoardNotFound()}>
+              Try again
+            </Button>
+            <Button variant="secondary" onClick={() => router.push("/boards/")}>
+              Back to boards
+            </Button>
+          </div>
         }
       />
     );
@@ -241,44 +289,81 @@ export function BoardView({ boardId }: BoardViewProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-4 lg:px-6">
-        <div className="min-w-0 flex-1">
-          {editingTitle && !readOnly ? (
-            <input
-              className="w-full max-w-md rounded border border-slate-200 px-2 py-1 text-xl font-semibold text-slate-900 outline-none focus:border-blue-600"
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={() => void handleRenameBoard()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  void handleRenameBoard();
-                }
-                if (e.key === "Escape") {
-                  setTitleDraft(board.name);
-                  setEditingTitle(false);
-                }
-              }}
-              autoFocus
-            />
-          ) : (
-            <button
-              type="button"
-              className="truncate text-left text-xl font-semibold text-slate-900 hover:text-blue-700"
-              onClick={() => !readOnly && setEditingTitle(true)}
-              disabled={readOnly}
-            >
-              {board.name}
-            </button>
-          )}
-          {readOnly ? (
-            <p className="mt-1 text-xs text-slate-500">Read-only access</p>
-          ) : null}
+      <header className="border-b border-slate-200 bg-white px-4 py-4 lg:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            {editingTitle && !readOnly ? (
+              <input
+                className="w-full max-w-md rounded border border-slate-200 px-2 py-1 text-xl font-semibold text-slate-900 outline-none focus:border-blue-600"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={() => void handleRenameBoard()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    void handleRenameBoard();
+                  }
+                  if (e.key === "Escape") {
+                    setTitleDraft(board.name);
+                    setEditingTitle(false);
+                  }
+                }}
+                autoFocus
+              />
+            ) : (
+              <button
+                type="button"
+                className="truncate text-left text-xl font-semibold text-slate-900 hover:text-blue-700"
+                onClick={() => !readOnly && setEditingTitle(true)}
+                disabled={readOnly}
+              >
+                {board.name}
+              </button>
+            )}
+            {readOnly ? (
+              <p className="mt-1 text-xs text-slate-500">Read-only access</p>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {!readOnly ? (
+              <>
+                <div className="relative" data-card-picker>
+                  <Button type="button" onClick={() => setShowCardPicker((open) => !open)}>
+                    + Add card
+                  </Button>
+                  {showCardPicker ? (
+                    <div
+                      className="absolute right-0 z-20 mt-2 min-w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-md"
+                      data-card-picker
+                    >
+                      <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Choose column
+                      </p>
+                      {board.columns.map((column) => (
+                        <button
+                          key={column.id}
+                          type="button"
+                          className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                          onClick={() => startAddCard(column.id)}
+                        >
+                          {column.title}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <Button type="button" variant="secondary" onClick={startAddColumn}>
+                  + Add column
+                </Button>
+              </>
+            ) : null}
+            {permission === "owner" ? (
+              <Button variant="ghost" onClick={() => void handleDeleteBoard()}>
+                Delete board
+              </Button>
+            ) : null}
+          </div>
         </div>
-        {permission === "owner" ? (
-          <Button variant="secondary" onClick={() => void handleDeleteBoard()}>
-            Delete board
-          </Button>
-        ) : null}
       </header>
 
       {error ? (
@@ -288,7 +373,7 @@ export function BoardView({ boardId }: BoardViewProps) {
       ) : null}
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto p-4">
+        <div ref={boardScrollRef} className="flex min-h-0 flex-1 gap-4 overflow-x-auto p-4">
           {board.columns.map((column) => (
             <div
               key={column.id}
@@ -304,10 +389,21 @@ export function BoardView({ boardId }: BoardViewProps) {
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`flex min-h-24 flex-1 flex-col gap-2 px-2 pb-2 ${
+                    className={`flex min-h-32 flex-1 flex-col gap-2 px-2 pb-2 ${
                       snapshot.isDraggingOver ? "bg-blue-50/60" : ""
                     }`}
                   >
+                    {column.cards.length === 0 &&
+                    !readOnly &&
+                    addingCardColumnId !== column.id ? (
+                      <button
+                        type="button"
+                        className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white/60 px-3 py-6 text-sm text-slate-600 hover:border-blue-400 hover:bg-blue-50/50 hover:text-blue-700"
+                        onClick={() => startAddCard(column.id)}
+                      >
+                        + Add first card
+                      </button>
+                    ) : null}
                     {column.cards.map((card, index) => (
                       <Draggable
                         key={card.id}
@@ -378,11 +474,8 @@ export function BoardView({ boardId }: BoardViewProps) {
                 ) : (
                   <button
                     type="button"
-                    className="mx-2 mb-3 rounded px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-200"
-                    onClick={() => {
-                      setAddingCardColumnId(column.id);
-                      setNewCardTitle("");
-                    }}
+                    className="mx-2 mb-3 rounded border border-slate-200 bg-white px-2 py-2 text-left text-sm font-medium text-blue-700 hover:bg-blue-50"
+                    onClick={() => startAddCard(column.id)}
                   >
                     + Add a card
                   </button>
@@ -392,7 +485,8 @@ export function BoardView({ boardId }: BoardViewProps) {
           ))}
 
           {!readOnly ? (
-            addingColumn ? (
+            <div ref={addColumnRef}>
+              {addingColumn ? (
               <form
                 className="flex w-72 shrink-0 flex-col rounded-lg border border-dashed border-slate-300 bg-white p-3"
                 onSubmit={(event) => {
@@ -428,15 +522,13 @@ export function BoardView({ boardId }: BoardViewProps) {
             ) : (
               <button
                 type="button"
-                className="flex h-fit w-72 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white px-4 py-8 text-sm text-slate-700 hover:bg-slate-50"
-                onClick={() => {
-                  setAddingColumn(true);
-                  setNewColumnTitle("");
-                }}
+                className="flex h-fit w-72 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-dashed border-blue-200 bg-blue-50/40 px-4 py-10 text-sm font-medium text-blue-700 hover:bg-blue-50"
+                onClick={startAddColumn}
               >
                 + Add column
               </button>
-            )
+            )}
+            </div>
           ) : null}
         </div>
       </DragDropContext>

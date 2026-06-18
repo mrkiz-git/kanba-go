@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { boardHref } from "@/lib/board-routes";
 import { useBoards } from "@/lib/boards-context";
 
 type SidebarProps = {
@@ -22,8 +23,9 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function boardHref(id: string) {
-  return `/boards/${id}/`;
+function boardLinkActive(pathname: string, boardId: string) {
+  const href = boardHref(boardId);
+  return pathname === href || pathname === `/boards/${boardId}`;
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
@@ -63,7 +65,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       <ul className="mt-2 space-y-1">
         {items.map((board) => {
           const href = boardHref(board.id);
-          const active = pathname === href || pathname === `/boards/${board.id}`;
+          const active = boardLinkActive(pathname, board.id);
           return (
             <li key={board.id}>
               <Link
