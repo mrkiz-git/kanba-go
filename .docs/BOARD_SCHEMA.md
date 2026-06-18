@@ -46,13 +46,21 @@ type User struct {
     UpdatedAt time.Time  `json:"updatedAt"`
 }
 
+// SharePermission is the access level in a board share. Excludes "owner" — ownership is not shareable.
+type SharePermission string
+
+const (
+    SharePermissionWrite SharePermission = "write"
+    SharePermissionRead  SharePermission = "read"
+)
+
 // BoardShare grants a user access to someone else's board.
 type BoardShare struct {
     ID         string          `json:"id"`
     BoardID    string          `json:"boardId"`
     UserID     string          `json:"userId"`
     UserEmail  string          `json:"userEmail"`
-    Permission BoardPermission `json:"permission"`
+    Permission SharePermission `json:"permission"`
     CreatedAt  time.Time       `json:"createdAt"`
 }
 
@@ -70,6 +78,7 @@ type BoardSummary struct {
     ID         string          `json:"id"`
     Name       string          `json:"name"`
     Permission BoardPermission `json:"permission"`
+    Version    int             `json:"version"`
     UpdatedAt  time.Time       `json:"updatedAt"`
 }
 
@@ -77,6 +86,7 @@ type BoardSummary struct {
 type Board struct {
     ID        string    `json:"id"`
     Name      string    `json:"name"`
+    Version   int       `json:"version"`
     Columns   []Column  `json:"columns"`
     UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -145,13 +155,21 @@ Granular updates use [RFC 6902](https://datatracker.ietf.org/doc/html/rfc6902) a
 
 `move` operations use RFC 6902 `from` pointing to the source path. The server recalculates `position` values after every patch.
 
+### Retry Contract
+
+Because a concurrent `move` operation shifts array indices, clients must handle `409 Conflict` from `PATCH /api/boards/:id` with this sequence:
+
+1. Re-fetch the full board (`GET /api/boards/:id`) to get the current snapshot and `version`.
+2. Recompute all array indices against the fresh snapshot.
+3. Re-send the patch with the updated `If-Match: "<version>"` header.
+
 ## WebSocket Events
 
 Real-time payloads wrap the changed entity:
 
 ```go
 type WSEvent struct {
-    Type      string    `json:"type"`      // "board.updated" | "card.updated" | "card.moved"
+    Type      string    `json:"type"`      // "board.updated" | "card.created" | "card.updated" | "card.moved"
     BoardID   string    `json:"boardId"`
     Payload   any       `json:"payload"`   // Board | Card | CardMove
     Timestamp time.Time `json:"timestamp"`
@@ -166,6 +184,17 @@ type CardMove struct {
 ```
 
 Clients subscribe per board: `GET /api/boards/:id/ws` (see `API.md`).
+
+### Event Dispatch Rules
+
+| Event type | Emitted when | Payload type |
+|------------|--------------|--------------|
+| `board.updated` | Full board replaced via PUT | `Board` |
+| `card.created` | New card added (REST or MCP `add_card`) | `Card` |
+| `card.updated` | Existing card fields changed with no column/position change | `Card` |
+| `card.moved` | Card column or position changed (supersedes `card.updated` for that mutation) | `CardMove` |
+
+`card.created` and `card.updated` are mutually exclusive for a given operation. `card.moved` is emitted instead of `card.updated` whenever `column_id` or `position` changes.
 
 ## Validation Rules
 

@@ -8,7 +8,7 @@ REST + WebSocket API served by the Go backend. JSON request/response bodies. Sta
 |------|--------|
 | Base path | `/api` |
 | Content-Type | `application/json` unless noted |
-| Auth header | `Authorization: Bearer <jwt>` (see `AUTH.md`) |
+| Auth header | `Authorization: Bearer <jwt>` (see `AUTH.md`); browser clients may use the `kanba_token` httpOnly cookie instead — middleware accepts both |
 | IDs in paths | UUID strings |
 | Router | `net/http` with `chi` or `echo` (decided at scaffolding) |
 | Errors | Consistent `APIError` envelope (below) |
@@ -80,6 +80,7 @@ List boards accessible to the caller (owned + shared).
       "id": "uuid",
       "name": "Sprint 12",
       "permission": "owner",
+      "version": 1,
       "updatedAt": "2026-06-18T10:00:00Z"
     }
   ]
@@ -133,7 +134,7 @@ Applies [RFC 6902](https://datatracker.ietf.org/doc/html/rfc6902) JSON Patch. Va
 
 **Response 409:** Patch conflicts with concurrent modification (ETag mismatch).
 
-Optimistic concurrency: clients send `If-Match: "<board.updatedAt>"` header; server rejects stale patches with 409.
+Optimistic concurrency: clients send `If-Match: "<board.version>"` header (e.g., `If-Match: "42"`); server rejects stale patches with 409. `board.version` is a monotonic integer that increments on every write — collision-proof at any write rate. See retry contract in `BOARD_SCHEMA.md`.
 
 ### `DELETE /api/boards/:id`
 
@@ -238,8 +239,9 @@ Upgrade via `gorilla/websocket`. JWT passed as query param `?token=<jwt>` (brows
 | Event type | Trigger |
 |------------|---------|
 | `board.updated` | Full board replace (PUT) |
-| `card.updated` | JSON Patch applied |
-| `card.moved` | Card moved between columns |
+| `card.created` | New card added (REST or MCP `add_card`) |
+| `card.updated` | Existing card fields changed without column/position change |
+| `card.moved` | Card moved between columns or reordered within a column |
 
 **Client → Server:** No client messages in v1. Board changes go through REST; server broadcasts to all subscribers.
 

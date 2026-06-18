@@ -144,9 +144,13 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler
 func RequireBoardPerm(perm domain.BoardPermission) func(http.Handler) http.Handler
 ```
 
+`AuthMiddleware` checks token sources in this order:
+1. `Authorization: Bearer <jwt>` header (non-browser clients: MCP, curl, programmatic access)
+2. `kanba_token` httpOnly cookie (browser clients — sent automatically by the browser, no JavaScript access required)
+
 Execution order for board routes:
 
-1. `AuthMiddleware` — parse JWT, set user in context; 401 on failure
+1. `AuthMiddleware` — resolve token from header or cookie, parse JWT, set user in context; 401 on failure
 2. `RequireBoardPerm` — load board, resolve permission; 403 on failure
 3. Handler
 
@@ -155,10 +159,10 @@ Admin routes use `RequireRole("admin")` instead of board permission.
 ## Frontend Auth Flow
 
 1. Unauthenticated visitors hitting `/` or `/boards/*` redirect to `/login`.
-2. Login stores JWT in `httpOnly` cookie `kanba_token` (SameSite=Lax, Secure in production).
-3. API calls include `Authorization: Bearer <token>` header.
+2. Login sets an `httpOnly` cookie `kanba_token` (SameSite=Lax, Secure in production) via `Set-Cookie` response header.
+3. The browser automatically includes `kanba_token` on same-origin requests — no JavaScript token handling needed.
 4. Admin users see `/admin` nav link; `/admin/*` routes check `role === 'admin'` client-side and server-side.
-5. On 401 response, client clears cookie and redirects to `/login`.
+5. On 401 response, client redirects to `/login` (cookie cleared server-side on logout via `Set-Cookie: kanba_token=; Max-Age=0`).
 
 ## MCP & WebSocket Auth
 

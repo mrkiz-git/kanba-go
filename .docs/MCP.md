@@ -18,6 +18,8 @@ All MCP requests require a valid user JWT (see `AUTH.md`):
 - **HTTP transport:** `Authorization: Bearer <jwt>` header
 - **stdio transport:** `KANBA_TOKEN` env var set before launching the process
 
+**Token lifetime:** JWTs expire after 24 hours. The HTTP transport can call `POST /api/auth/refresh` before expiry. The stdio transport has no in-process refresh path — an expired token causes all tool calls to fail with 401, and the process must be restarted with a fresh token. Consider scripting token renewal into the launch wrapper for long-running processes (IDE integrations, CI daemons).
+
 Tools operate within the authenticated user's permission scope. No admin-elevated tools in v1.
 
 ## Server Capabilities
@@ -168,6 +170,10 @@ Apply granular updates to an existing card via JSON Patch semantics.
       "type": "string",
       "description": "UUID of the card to update"
     },
+    "board_version": {
+      "type": "integer",
+      "description": "Current board version for optimistic concurrency (recommended). If provided and stale, returns a conflict error — re-fetch the board and retry."
+    },
     "title": {
       "type": "string",
       "description": "New card title"
@@ -186,17 +192,25 @@ Apply granular updates to an existing card via JSON Patch semantics.
     }
   },
   "required": ["board_id", "card_id"],
+  "anyOf": [
+    {"required": ["title"]},
+    {"required": ["description"]},
+    {"required": ["column_id"]},
+    {"required": ["position"]}
+  ],
   "additionalProperties": false
 }
 ```
 
-At least one of `title`, `description`, `column_id`, or `position` must be provided.
+At least one of `title`, `description`, `column_id`, or `position` must be provided (enforced by the `anyOf` schema constraint above).
 
 **Returns:** Updated `Card` object.
 
 Internally translated to RFC 6902 patch operations (see `BOARD_SCHEMA.md`) and applied via the same code path as `PATCH /api/boards/:id`.
 
-Requires `write` or `owner` permission. Broadcasts `card.moved` or `card.updated` WebSocket event.
+Requires `write` or `owner` permission. Broadcasts `card.moved` (when `column_id` or `position` changes) or `card.updated` (field-only change) WebSocket event — never both for the same call.
+
+If `board_version` is provided and does not match the current board version, returns `isError: true` with code `conflict`.
 
 ---
 
@@ -223,6 +237,7 @@ func RegisterTools(s *server.MCPServer, boards BoardService) {
 |----------------|-----------------|
 | `domain.ErrNotFound` | `isError: true`, message "Board/card not found" |
 | `domain.ErrForbidden` | `isError: true`, message "Insufficient permission" |
+| `domain.ErrConflict` | `isError: true`, message "Board version conflict — re-fetch and retry" |
 | `domain.ErrValidation` | `isError: true`, message with field details |
 | Other | `isError: true`, message "Internal error" |
 

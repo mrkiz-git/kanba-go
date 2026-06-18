@@ -66,6 +66,7 @@ func Migrate(db *sql.DB) error { /* golang-migrate with iofs source */ }
 | `id` | TEXT | PRIMARY KEY |
 | `owner_id` | TEXT | NOT NULL, REFERENCES `users(id)` ON DELETE CASCADE |
 | `name` | TEXT | NOT NULL |
+| `version` | INTEGER | NOT NULL DEFAULT 1 |
 | `created_at` | TEXT | NOT NULL |
 | `updated_at` | TEXT | NOT NULL |
 
@@ -80,7 +81,7 @@ Collaborative sharing (Option B). Grants read or write access to a registered us
 | `id` | TEXT | PRIMARY KEY |
 | `board_id` | TEXT | NOT NULL, REFERENCES `boards(id)` ON DELETE CASCADE |
 | `user_id` | TEXT | NOT NULL, REFERENCES `users(id)` ON DELETE CASCADE |
-| `permission` | TEXT | NOT NULL, CHECK (`permission` IN ('read', 'write')) |
+| `permission` | TEXT | NOT NULL, CHECK (`permission` IN ('read', 'write')) — maps to `SharePermission` in `BOARD_SCHEMA.md` |
 | `created_at` | TEXT | NOT NULL |
 
 Unique index: `(board_id, user_id)`.
@@ -138,10 +139,31 @@ boards ──< columns ──< cards ──< attachments
 
 Effective board permission for user `U` on board `B`:
 
-1. If `boards.owner_id = U` → `owner`
-2. Else if `board_shares` row exists → `read` or `write`
-3. Else if caller is `admin` → `owner` (admin override for management)
+1. If caller role is `admin` → `owner` (admin override; evaluated before all other checks)
+2. If `boards.owner_id = U` → `owner`
+3. Else if `board_shares` row exists → `read` or `write` (see `SharePermission` in `BOARD_SCHEMA.md`)
 4. Else → no access (403)
+
+## Attachment Authorization
+
+The attachment endpoints (`GET/DELETE /api/attachments/:id`, `POST /api/cards/:id/attachments`) carry no board ID in the route. `RequireBoardPerm` resolves the board via a JOIN before applying the standard access-resolution query above:
+
+```sql
+-- for /api/attachments/:id
+SELECT b.id, b.owner_id
+FROM attachments a
+JOIN cards c ON c.id = a.card_id
+JOIN columns col ON col.id = c.column_id
+JOIN boards b ON b.id = col.board_id
+WHERE a.id = :attachment_id
+
+-- for /api/cards/:id/attachments
+SELECT b.id, b.owner_id
+FROM cards c
+JOIN columns col ON col.id = c.column_id
+JOIN boards b ON b.id = col.board_id
+WHERE c.id = :card_id
+```
 
 ## Seed Data
 
@@ -183,7 +205,7 @@ type BoardStore interface {
     Update(ctx context.Context, b *domain.Board) error
     Delete(ctx context.Context, id string) error
     ApplyPatch(ctx context.Context, boardID string, patch jsonpatch.Patch) (*domain.Board, error)
-    Share(ctx context.Context, boardID, userID, permission string) error
+    Share(ctx context.Context, boardID, userID string, permission domain.SharePermission) error
     RevokeShare(ctx context.Context, boardID, userID string) error
     ListShares(ctx context.Context, boardID string) ([]domain.BoardShare, error)
 }
