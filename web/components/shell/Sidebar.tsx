@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { useBoards } from "@/lib/boards-context";
 
 type SidebarProps = {
   open: boolean;
@@ -20,9 +22,67 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+function boardHref(id: string) {
+  return `/boards/${id}/`;
+}
+
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, logout } = useAuth();
+  const { boards, createBoard } = useBoards();
+  const [creating, setCreating] = useState(false);
+  const [newBoardName, setNewBoardName] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+
+  const owned = boards.filter((board) => board.permission === "owner");
+  const shared = boards.filter((board) => board.permission !== "owner");
+
+  async function handleCreateBoard() {
+    const name = newBoardName.trim();
+    if (!name) {
+      return;
+    }
+    setCreating(true);
+    try {
+      const board = await createBoard(name);
+      setNewBoardName("");
+      setShowCreate(false);
+      onClose();
+      router.push(boardHref(board.id));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function renderBoardList(items: typeof boards, emptyLabel: string) {
+    if (items.length === 0) {
+      return <p className="mt-2 px-2 text-sm text-slate-600">{emptyLabel}</p>;
+    }
+    return (
+      <ul className="mt-2 space-y-1">
+        {items.map((board) => {
+          const href = boardHref(board.id);
+          const active = pathname === href || pathname === `/boards/${board.id}`;
+          return (
+            <li key={board.id}>
+              <Link
+                href={href}
+                className={`block rounded px-2 py-2 text-sm ${
+                  active
+                    ? "bg-blue-50 font-medium text-blue-700"
+                    : "text-slate-700 hover:bg-slate-200"
+                }`}
+                onClick={onClose}
+              >
+                {board.name}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
 
   return (
     <>
@@ -50,14 +110,62 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
             My Boards
           </p>
-          <p className="mt-2 px-2 text-sm text-slate-600">No boards yet.</p>
+          {renderBoardList(owned, "No boards yet.")}
 
-          <button
-            type="button"
-            className="mt-4 w-full rounded px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-200"
-          >
-            + New Board
-          </button>
+          {shared.length > 0 ? (
+            <>
+              <p className="mt-6 px-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Shared with me
+              </p>
+              {renderBoardList(shared, "")}
+            </>
+          ) : null}
+
+          {showCreate ? (
+            <form
+              className="mt-4 space-y-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleCreateBoard();
+              }}
+            >
+              <input
+                className="w-full rounded border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-blue-600"
+                placeholder="Board name"
+                value={newBoardName}
+                onChange={(e) => setNewBoardName(e.target.value)}
+                maxLength={100}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  disabled={creating || !newBoardName.trim()}
+                >
+                  Create
+                </button>
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-200"
+                  onClick={() => {
+                    setShowCreate(false);
+                    setNewBoardName("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button
+              type="button"
+              className="mt-4 w-full rounded px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-200"
+              onClick={() => setShowCreate(true)}
+            >
+              + New Board
+            </button>
+          )}
         </div>
 
         <div className="border-t border-slate-200 px-4 py-4">

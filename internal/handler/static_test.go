@@ -13,6 +13,7 @@ func TestStatic(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "index.html"), "<html>home</html>")
 	writeFile(t, filepath.Join(root, "login.html"), "<html>login</html>")
+	writeFile(t, filepath.Join(root, "boards", "demo", "index.html"), "<html>board-shell</html>")
 	writeFile(t, filepath.Join(root, "_next", "static", "app.js"), "console.log('app')")
 
 	handler := Static(root)
@@ -42,10 +43,16 @@ func TestStatic(t *testing.T) {
 			wantBody:   "console.log",
 		},
 		{
-			name:       "spa fallback",
+			name:       "board export route",
 			path:       "/boards/demo",
 			wantStatus: http.StatusOK,
-			wantBody:   "home",
+			wantBody:   "board-shell",
+		},
+		{
+			name:       "board dynamic route fallback",
+			path:       "/boards/abc-123",
+			wantStatus: http.StatusOK,
+			wantBody:   "board-shell",
 		},
 	}
 

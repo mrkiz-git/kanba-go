@@ -10,7 +10,7 @@ Track unresolved issues per feature branch. The agent checks this file before st
 
 _Integration branch — parts 1–7 merged for testing and deployment._
 
-Includes: contracts, UI planning docs, scaffolding, frontend base, auth, board database layer, and board REST API.
+Includes: contracts, UI planning docs, scaffolding, frontend base, auth, board database layer, board REST API, and Kanban UI (list, DnD, card modal).
 
 _No open issues._
 

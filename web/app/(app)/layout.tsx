@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/shell/AppShell";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { BoardsProvider } from "@/lib/boards-context";
 
 export default function AppLayout({
   children,
@@ -8,7 +9,9 @@ export default function AppLayout({
 }>) {
   return (
     <AuthGuard>
-      <AppShell>{children}</AppShell>
+      <BoardsProvider>
+        <AppShell>{children}</AppShell>
+      </BoardsProvider>
     </AuthGuard>
   );
 }

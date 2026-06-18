@@ -63,5 +63,27 @@ func resolveStaticFile(root, urlPath, indexPath string) (string, bool) {
 		return candidate, true
 	}
 
+	if boardShell := boardSPAFallback(root, clean); boardShell != "" {
+		return boardShell, false
+	}
+
 	return indexPath, false
+}
+
+func boardSPAFallback(root, urlPath string) string {
+	parts := strings.Split(strings.Trim(urlPath, "/"), "/")
+	if len(parts) != 2 || parts[0] != "boards" {
+		return ""
+	}
+
+	for _, rel := range []string{
+		filepath.Join("boards", "demo", "index.html"),
+		filepath.Join("boards", "index.html"),
+	} {
+		candidate := filepath.Join(root, rel)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
 }
