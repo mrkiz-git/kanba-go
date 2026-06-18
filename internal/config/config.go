@@ -8,12 +8,20 @@ import (
 
 const Version = "0.1.0"
 
+const defaultJWTSecret = "dev-only-jwt-secret-change-in-production"
+
 type Config struct {
-	Host      string
-	Port      string
-	StaticDir string
-	LogLevel  logging.Level
-	LogFile   string
+	Host         string
+	Port         string
+	StaticDir    string
+	LogLevel     logging.Level
+	LogFile      string
+	DatabasePath string
+	JWTSecret    string
+	AdminEmail   string
+	AdminPassword string
+	AdminName    string
+	SecureCookie bool
 }
 
 func Load() Config {
@@ -32,15 +40,52 @@ func Load() Config {
 		staticDir = "web/out"
 	}
 
+	databasePath := os.Getenv("DATABASE_PATH")
+	if databasePath == "" {
+		databasePath = "data/kanba.db"
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = defaultJWTSecret
+	}
+
+	adminEmail := os.Getenv("ADMIN_EMAIL")
+	if adminEmail == "" {
+		adminEmail = "admin@kanba.local"
+	}
+
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	if adminPassword == "" {
+		adminPassword = "changeme"
+	}
+
+	adminName := os.Getenv("ADMIN_NAME")
+	if adminName == "" {
+		adminName = "System Admin"
+	}
+
+	secureCookie := os.Getenv("KANBA_SECURE_COOKIE") == "1" || os.Getenv("KANBA_SECURE_COOKIE") == "true"
+
 	return Config{
-		Host:      host,
-		Port:      port,
-		StaticDir: staticDir,
-		LogLevel:  logging.ParseLevel(os.Getenv("LOG_LEVEL")),
-		LogFile:   os.Getenv("LOG_FILE"),
+		Host:          host,
+		Port:          port,
+		StaticDir:     staticDir,
+		LogLevel:      logging.ParseLevel(os.Getenv("LOG_LEVEL")),
+		LogFile:       os.Getenv("LOG_FILE"),
+		DatabasePath:  databasePath,
+		JWTSecret:     jwtSecret,
+		AdminEmail:    adminEmail,
+		AdminPassword: adminPassword,
+		AdminName:     adminName,
+		SecureCookie:  secureCookie,
 	}
 }
 
 func (c Config) Addr() string {
 	return c.Host + ":" + c.Port
+}
+
+func DefaultJWTSecret() string {
+	return defaultJWTSecret
 }

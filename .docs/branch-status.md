@@ -90,9 +90,18 @@ Code review fixes (all 8 issues resolved):
 
 ## part-05-auth
 
-_Status: not started_
+_Status: complete_
 
 _No open issues._
+
+Deliverables:
+- [x] SQLite users table with embedded migrations (`internal/store/migrations/`)
+- [x] JWT auth APIs: register, login, logout, me, refresh (`internal/handler/auth.go`)
+- [x] Auth middleware with Bearer header and `kanba_token` cookie (`internal/middleware/auth.go`)
+- [x] Admin role guard on `/api/admin/*` endpoints
+- [x] Frontend auth provider, API client, login/register forms
+- [x] `AuthGuard` and `AdminGuard` for protected routes
+- [x] Seeded admin user from env (`ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`)
 
 ---
 
