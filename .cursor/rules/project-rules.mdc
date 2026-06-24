@@ -1,0 +1,20 @@
+---
+description: Load shared project context from CONTEXT.md on every session
+alwaysApply: true
+---
+
+# Project Context
+
+**Single source of truth:** `.docs/CONTEXT.md`
+
+At the start of every conversation — and before answering questions about this project's stack, architecture, conventions, or communication style — read `.docs/CONTEXT.md` and follow it.
+
+That file defines:
+
+- Project overview and tech stack
+- Architecture and documentation map
+- Behavioral guidelines
+- Communication protocol (ADHD-optimized)
+- Technical stack
+
+Do not duplicate or override that content here. For plan-step work (Parts 1–11), also follow the `plan-step-workflow` rule.
