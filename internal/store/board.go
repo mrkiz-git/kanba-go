@@ -531,7 +531,27 @@ func syncBoardContent(ctx context.Context, tx *sql.Tx, boardID string, columns [
 		return err
 	}
 
+	rows, err := tx.QueryContext(ctx, `SELECT c.id FROM cards c JOIN columns col ON c.column_id = col.id WHERE col.board_id = ?`, boardID)
+	if err != nil {
+		return err
+	}
+	var existingCards []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		existingCards = append(existingCards, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
 	seenCols := make(map[string]struct{}, len(columns))
+	seenCards := make(map[string]struct{})
+
 	for colIdx, col := range columns {
 		colID := col.ID
 		if colID == "" {
@@ -539,24 +559,65 @@ func syncBoardContent(ctx context.Context, tx *sql.Tx, boardID string, columns [
 		}
 		seenCols[colID] = struct{}{}
 
-		if containsString(existingCols, colID) {
-			_, err = tx.ExecContext(ctx,
-				`UPDATE columns SET title = ?, position = ?, updated_at = ? WHERE id = ? AND board_id = ?`,
-				col.Title, colIdx, formatTime(now), colID, boardID,
-			)
-		} else {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE columns SET title = ?, position = ?, updated_at = ? WHERE id = ? AND board_id = ?`,
+			col.Title, colIdx, formatTime(now), colID, boardID,
+		)
+		if err != nil {
+			return err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected == 0 {
 			_, err = tx.ExecContext(ctx,
 				`INSERT INTO columns (id, board_id, title, position, created_at, updated_at)
 				 VALUES (?, ?, ?, ?, ?, ?)`,
 				colID, boardID, col.Title, colIdx, formatTime(now), formatTime(now),
 			)
-		}
-		if err != nil {
-			return err
+			if err != nil {
+				return err
+			}
 		}
 
-		if err := syncColumnCards(ctx, tx, colID, col.Cards, now); err != nil {
-			return err
+		for cardIdx, card := range col.Cards {
+			cardID := card.ID
+			if cardID == "" {
+				cardID = uuid.New().String()
+			}
+			seenCards[cardID] = struct{}{}
+
+			res, err = tx.ExecContext(ctx,
+				`UPDATE cards SET column_id = ?, title = ?, description = ?, position = ?, updated_at = ?
+				 WHERE id = ?`,
+				colID, card.Title, card.Description, cardIdx, formatTime(now), cardID,
+			)
+			if err != nil {
+				return err
+			}
+			affected, err = res.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if affected == 0 {
+				_, err = tx.ExecContext(ctx,
+					`INSERT INTO cards (id, column_id, title, description, position, created_at, updated_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+					cardID, colID, card.Title, card.Description, cardIdx, formatTime(now), formatTime(now),
+				)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	for _, cardID := range existingCards {
+		if _, ok := seenCards[cardID]; !ok {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM cards WHERE id = ?`, cardID); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -567,71 +628,12 @@ func syncBoardContent(ctx context.Context, tx *sql.Tx, boardID string, columns [
 			}
 		}
 	}
-	return nil
-}
 
-func syncColumnCards(ctx context.Context, tx *sql.Tx, columnID string, cards []domain.Card, now time.Time) error {
-	existingCards, err := listCardIDs(ctx, tx, columnID)
-	if err != nil {
-		return err
-	}
-
-	seenCards := make(map[string]struct{}, len(cards))
-	for cardIdx, card := range cards {
-		cardID := card.ID
-		if cardID == "" {
-			cardID = uuid.New().String()
-		}
-		seenCards[cardID] = struct{}{}
-
-		if containsString(existingCards, cardID) {
-			_, err = tx.ExecContext(ctx,
-				`UPDATE cards SET column_id = ?, title = ?, description = ?, position = ?, updated_at = ?
-				 WHERE id = ?`,
-				columnID, card.Title, card.Description, cardIdx, formatTime(now), cardID,
-			)
-		} else {
-			_, err = tx.ExecContext(ctx,
-				`INSERT INTO cards (id, column_id, title, description, position, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-				cardID, columnID, card.Title, card.Description, cardIdx, formatTime(now), formatTime(now),
-			)
-		}
-		if err != nil {
-			return err
-		}
-	}
-
-	for _, cardID := range existingCards {
-		if _, ok := seenCards[cardID]; !ok {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM cards WHERE id = ? AND column_id = ?`, cardID, columnID); err != nil {
-				return err
-			}
-		}
-	}
 	return nil
 }
 
 func listColumnIDs(ctx context.Context, tx *sql.Tx, boardID string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM columns WHERE board_id = ?`, boardID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
-func listCardIDs(ctx context.Context, tx *sql.Tx, columnID string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM cards WHERE column_id = ?`, columnID)
 	if err != nil {
 		return nil, err
 	}

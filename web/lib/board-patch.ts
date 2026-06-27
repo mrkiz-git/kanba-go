@@ -65,5 +65,5 @@ export function replaceCardFieldPatch(
   if (cardIdx < 0) {
     throw new Error("Card not found");
   }
-  return [{ op: "replace", path: `/columns/${colIdx}/cards/${cardIdx}/${field}`, value }];
+  return [{ op: "add", path: `/columns/${colIdx}/cards/${cardIdx}/${field}`, value }];
 }
